@@ -33,7 +33,7 @@ Or one-shot: `py pci_cert.py` (prints the per-case delegate commands; you run ea
 | `discover_admissions.py` | POSTs `top.aspx` to switch chart, fetches `list3.aspx`, picks I-sn matching PCI date |
 | `request_chart_access.py` | Submits 線上申請 (`exrequest.aspx`) for charts outside the auto-access window |
 | `fetch_emr.py` | Per matched admission: AD/DC/PL/diagnosis/order/consults/exam/eform PDFs |
-| `render_docx.py` | python-docx fills the template's first-group tables; drops the second group |
+| `render_docx.py` | python-docx fills the template; routes per-case by `cases.csv.group` (1 → drop 第二組, fill Group 1; 2 → drop 第一組, fill Group 2 with timeline + complication checklist) |
 | `pci_cert.py` | Orchestrator |
 | `template_schema.md` | YAML field definitions handed to Gemini (Group 1 — Stent > 5) |
 | `template_schema_group2.md` | YAML field definitions for Group 2 (Cover Stent + Elective PCI with Complication) — timeline, cover-stent, pericardiocentesis, CV-surgery stand-by, MCS devices |
@@ -91,3 +91,13 @@ MIT
 
 - [euroscore_NCKUH](https://github.com/alexdodochen/euroscore_NCKUH) — same author, EuroSCORE II pipeline using a similar fetch pattern
 - [Claude-Gemini-Dialogue](https://github.com/alexdodochen/Claude-Gemini-Dialogue) — the delegation wrapper used in step 4
+- [pci_cert_NCKUH_complication](https://github.com/alexdodochen/pci_cert_NCKUH_complication) — Claude Code skill bundling the Group 2 (Cover Stent + Complication) workflow that lives in this repo
+
+## Group 2 (Cover Stent + Elective PCI with Complication)
+
+For complication cases set `group=2` in `cases.csv`. The pipeline then:
+- routes Gemini delegation to `template_schema_group2.md` (timeline 8 events with HH:MM, complication checklist 11 rows, M&M takeaway)
+- adds `護理紀錄` / `病程紀錄` / `家庭會議` to `fetch_emr.py` interest patterns (HH:MM timestamps for the timeline)
+- renders via `fill_doc_g2()` which drops 第一組 from the template and fills 第二組 tables
+
+See the sibling skill repo above for the conceptual write-up.
