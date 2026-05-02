@@ -34,14 +34,12 @@ def cell_text(cell):
     return "".join(p.text for p in cell.paragraphs)
 
 
-def set_cell_text(cell, text):
-    """Replace a cell's full text with `text`, preserving the first paragraph's
-    style. Multi-line text becomes multiple paragraphs."""
-    # Remove all but first paragraph
+def set_cell_text(cell, text, source=None):
+    """Replace cell's text with `text`. If `source` given, append a
+    parenthesized "[來源: ...]" line in italics underneath."""
     p0 = cell.paragraphs[0]
     for p in list(cell.paragraphs[1:]):
         p._element.getparent().remove(p._element)
-    # Clear runs in p0
     for r in list(p0.runs):
         r._element.getparent().remove(r._element)
     lines = (text or "").split("\n")
@@ -49,6 +47,11 @@ def set_cell_text(cell, text):
     for line in lines[1:]:
         new_p = cell.add_paragraph()
         new_p.add_run(line)
+    if source:
+        src_p = cell.add_paragraph()
+        run = src_p.add_run(f"[來源: {source}]")
+        run.italic = True
+        run.font.size = None  # let inheritance reduce; no hard size to avoid styling fights
 
 
 def label_match(label, target):
@@ -88,27 +91,32 @@ def scalar_fillers(y):
     syntax = y.get("syntax_score")
     syntax_str = str(syntax) if syntax not in (None, "null") else "—"
 
+    # (label_keyword, value, source)
     fillers = [
-        ("病歷號 Chart No.", y.get("chart_no", "")),
-        ("姓名", y.get("name_code", "")),
-        ("PCI 日期", y.get("pci_date", "")),
-        ("Operator", y.get("operator", "")),
-        ("Demographics", y.get("demographics_comorbidities", "")),
-        ("Presentation", y.get("presentation", "")),
-        ("病灶位置", y.get("lesion_summary", "")),
-        ("SYNTAX score", syntax_str),
-        ("為何選 PCI", y.get("why_pci_not_cabg", "")),
-        ("Stent 數量", stent_block + "\n\n" + total_str),
-        ("Total stent length", f"{y.get('total_stent_length_mm')} mm" if y.get("total_stent_length_mm") is not None else "—"),
-        ("使用的 imaging", y.get("imaging_used", "")),
-        ("Adjunctive devices", y.get("adjunctive_devices", "")),
-        ("為何需要 >5 支", y.get("why_more_than_5_stents", "")),
-        ("Final TIMI flow", timi),
-        ("Procedural complication", y.get("procedural_complication", "")),
-        ("Contrast volume", contrast_str),
-        ("Fluoroscopy time", fluoro_str),
-        ("Door-to-device", door_str),
-        ("被點到時這樣開場", y.get("opening_one_liner", "")),
+        ("病歷號 Chart No.", y.get("chart_no", ""), None),
+        ("姓名", y.get("name_code", ""), None),
+        ("PCI 日期", y.get("pci_date", ""), None),
+        ("Operator", y.get("operator", ""), y.get("operator_src")),
+        ("Demographics", y.get("demographics_comorbidities", ""),
+            y.get("demographics_comorbidities_src")),
+        ("Presentation", y.get("presentation", ""), y.get("presentation_src")),
+        ("病灶位置", y.get("lesion_summary", ""), y.get("lesion_summary_src")),
+        ("SYNTAX score", syntax_str, y.get("syntax_score_src")),
+        ("為何選 PCI", y.get("why_pci_not_cabg", ""), y.get("why_pci_not_cabg_src")),
+        ("Stent 數量", stent_block + "\n\n" + total_str, y.get("stents_src")),
+        ("Total stent length",
+            f"{y.get('total_stent_length_mm')} mm" if y.get("total_stent_length_mm") is not None else "—",
+            y.get("stents_src")),
+        ("使用的 imaging", y.get("imaging_used", ""), y.get("imaging_used_src")),
+        ("Adjunctive devices", y.get("adjunctive_devices", ""), y.get("adjunctive_devices_src")),
+        ("為何需要 >5 支", y.get("why_more_than_5_stents", ""), None),
+        ("Final TIMI flow", timi, y.get("final_timi_flow_src")),
+        ("Procedural complication", y.get("procedural_complication", ""),
+            y.get("procedural_complication_src")),
+        ("Contrast volume", contrast_str, y.get("contrast_volume_src")),
+        ("Fluoroscopy time", fluoro_str, y.get("fluoroscopy_time_src")),
+        ("Door-to-device", door_str, y.get("door_to_device_src")),
+        ("被點到時這樣開場", y.get("opening_one_liner", ""), None),
     ]
     return fillers
 
@@ -199,6 +207,136 @@ def drop_group_two(doc):
             body.remove(child)
 
 
+def format_euroscore_block(es):
+    """Build a multi-line text block summarizing the EuroSCORE II result."""
+    if not es or not es.get("computed"):
+        return None, None
+    comp = es["computed"]
+    inp = es.get("inputs") or {}
+    rat = es.get("rationale") or {}
+    score = comp.get("score_pct")
+    band_zh = {
+        "low": "低風險",
+        "intermediate": "中風險",
+        "high": "高風險",
+        "very_high": "極高風險",
+    }.get(comp.get("risk_band"), comp.get("risk_band"))
+    contribs = comp.get("contributors") or []
+    top3 = "; ".join(c["factor"] for c in contribs[:3])
+
+    lines = [f"EuroSCORE II = {score:.2f}%   ({band_zh})"]
+    if comp.get("cc_ml_min") is not None:
+        lines.append(f"  Cockcroft-Gault CC = {comp['cc_ml_min']:.1f} mL/min  → renal: {comp.get('derived_renal')}")
+    if top3:
+        lines.append(f"  主要貢獻因子: {top3}")
+    lines.append("")
+    lines.append("  Inputs:")
+    lines.append(
+        f"  age={inp.get('age')}  female={inp.get('female')}  "
+        f"NYHA={inp.get('nyha')}  CCS4={inp.get('ccs4')}  "
+        f"IDDM={inp.get('iddm')}  ECA={inp.get('extracardiac_arteriopathy')}  "
+        f"COPD={inp.get('chronic_pulmonary_disease')}  poor mobility={inp.get('poor_mobility')}"
+    )
+    lines.append(
+        f"  prev cardiac surgery={inp.get('previous_cardiac_surgery')}  "
+        f"active IE={inp.get('active_endocarditis')}  critical preop={inp.get('critical_preop')}  "
+        f"LV={inp.get('lv_function')}  recent MI={inp.get('recent_mi')}  "
+        f"PASP={inp.get('pa_systolic')}  renal={inp.get('renal')}"
+    )
+    lines.append(
+        f"  urgency={inp.get('urgency')}  weight={inp.get('weight_of_procedure')}  "
+        f"thoracic aorta={inp.get('thoracic_aorta')}"
+    )
+    if rat:
+        lines.append("")
+        lines.append("  Rationale per field:")
+        for k, v in rat.items():
+            lines.append(f"    • {k}: {v}")
+
+    src = "計算: euroscore_NCKUH/euroscore_ii.py (Nashef 2012)\n      Inputs 來源見上方各欄位 _src;院內 EuroSCORE 表單 (若有): 成大電子表單(依類別) → TemplateCode EMR-3-04-008"
+    return "\n".join(lines), src
+
+
+def insert_euroscore_after_why_pci(doc, euroscore_text, euroscore_src):
+    """Find the table containing "為何選 PCI 不選 CABG" and insert a 2-col table
+    right after it: [EuroSCORE II (預測手術死亡率) | <text>]."""
+    if not euroscore_text:
+        return
+    target = None
+    for tbl in doc.tables:
+        joined = "".join(cell_text(c) for row in tbl.rows for c in row.cells)
+        if "為何選 PCI" in joined:
+            target = tbl
+            break
+    if target is None:
+        return
+    # Build a new table with the same column widths by cloning the target's structure.
+    from copy import deepcopy
+    new_tbl_xml = deepcopy(target._element)
+    # We want exactly one row with 2 cells. Keep the first row, drop the rest.
+    rows = new_tbl_xml.findall(qn("w:tr"))
+    for r in rows[1:]:
+        new_tbl_xml.remove(r)
+    # Insert immediately after target
+    target._element.addnext(new_tbl_xml)
+    # Now grab the inserted table via the doc.tables list (rebuilt from XML)
+    # The inserted table is right after `target` in document order.
+    # Use python-docx's Table wrapper:
+    from docx.table import Table
+    new_table = Table(new_tbl_xml, target._parent)
+    cells = new_table.rows[0].cells
+    if len(cells) >= 2:
+        set_cell_text(cells[0], "EuroSCORE II\n(預測手術死亡率)")
+        set_cell_text(cells[1], euroscore_text, source=euroscore_src)
+
+
+def insert_score_block_after_presentation(doc, hasbled, timi):
+    """For ACS/AMI cases, insert HAS-BLED + TIMI block after Presentation row."""
+    if not (hasbled or timi):
+        return
+    target = None
+    for tbl in doc.tables:
+        joined = "".join(cell_text(c) for row in tbl.rows for c in row.cells)
+        if "Presentation" in joined and "STEMI" in joined:
+            target = tbl
+            break
+    if target is None:
+        return
+    parts = []
+    src_parts = []
+    if hasbled:
+        parts.append(f"HAS-BLED Score = {hasbled.get('total')} 分  ({hasbled.get('risk_label', '')})")
+        items = hasbled.get("items") or []
+        for it in items:
+            parts.append(f"  {it}")
+        if hasbled.get("src"):
+            src_parts.append(hasbled["src"])
+    if timi:
+        if parts:
+            parts.append("")
+        parts.append(f"TIMI Score = {timi.get('total')} 分")
+        items = timi.get("items") or []
+        for it in items:
+            parts.append(f"  {it}")
+        if timi.get("src"):
+            src_parts.append(timi["src"])
+    text = "\n".join(parts)
+    src = "; ".join(sorted(set(src_parts))) if src_parts else None
+
+    from copy import deepcopy
+    new_tbl_xml = deepcopy(target._element)
+    rows = new_tbl_xml.findall(qn("w:tr"))
+    for r in rows[1:]:
+        new_tbl_xml.remove(r)
+    target._element.addnext(new_tbl_xml)
+    from docx.table import Table
+    new_table = Table(new_tbl_xml, target._parent)
+    cells = new_table.rows[0].cells
+    if len(cells) >= 2:
+        set_cell_text(cells[0], "HAS-BLED + TIMI\n(ACS 評分)")
+        set_cell_text(cells[1], text, source=src)
+
+
 def fill_doc(template_path, yaml_data, output_path):
     doc = Document(str(template_path))
 
@@ -215,11 +353,11 @@ def fill_doc(template_path, yaml_data, output_path):
             label = cell_text(cells[0]).strip()
             if not label:
                 continue
-            for i, (kw, val) in enumerate(fillers):
+            for i, (kw, val, src) in enumerate(fillers):
                 if i in used:
                     continue
                 if kw in label:
-                    set_cell_text(cells[1], str(val) if val is not None else "—")
+                    set_cell_text(cells[1], str(val) if val is not None else "—", source=src)
                     used.add(i)
                     break
 
@@ -230,6 +368,16 @@ def fill_doc(template_path, yaml_data, output_path):
                 fill_checklist(tbl, yaml_data.get("evidence_checklist") or {})
 
     fill_qa(doc, yaml_data.get("likely_questions") or [])
+
+    # NEW: insert score rows
+    es = yaml_data.get("euroscore_ii") or {}
+    es_text, es_src = format_euroscore_block(es)
+    insert_euroscore_after_why_pci(doc, es_text, es_src)
+    insert_score_block_after_presentation(
+        doc,
+        yaml_data.get("hasbled"),
+        yaml_data.get("timi"),
+    )
 
     doc.save(str(output_path))
     return output_path
@@ -246,8 +394,11 @@ def main():
         y = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
         name_code = (y.get("name_code") or chart).replace("/", "")
         out_path = OUT_DIR / f"{chart}_{name_code}_filled.docx"
-        fill_doc(TEMPLATE, y, out_path)
-        print(f"  rendered -> {out_path}")
+        try:
+            fill_doc(TEMPLATE, y, out_path)
+            print(f"  rendered -> {out_path}")
+        except PermissionError:
+            print(f"  {chart}: SKIP — {out_path.name} is open (close it in Word and re-run)")
 
 
 if __name__ == "__main__":
