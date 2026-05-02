@@ -207,6 +207,289 @@ def drop_group_two(doc):
             body.remove(child)
 
 
+def drop_group_one(doc):
+    """For group=2 cases: delete everything BEFORE the 第二組 title table so the
+    output starts with the Group-2 cheatsheet."""
+    body = doc.element.body
+    boundary = None
+    for child in list(body):
+        text = "".join(t.text or "" for t in child.iter(qn("w:t")))
+        if GROUP2_TITLE_RE.search(text):
+            boundary = child
+            break
+    if boundary is None:
+        return
+    for child in list(body):
+        if child is boundary:
+            return
+        if child.tag == qn("w:sectPr"):
+            continue
+        body.remove(child)
+
+
+# ---------- Group 2 fillers ----------
+
+def _fmt_cover_stent(cs):
+    if not cs:
+        return "—"
+    if cs.get("used") is False:
+        return "未使用"
+    if cs.get("used") is None:
+        return "—"
+    bs = cs.get("brand_size") or "?"
+    pos = cs.get("position") or "?"
+    return f"使用:{bs};部署位置:{pos}"
+
+
+def _fmt_pericardiocentesis(p):
+    if not p:
+        return "—"
+    if p.get("performed") is False:
+        return "未執行"
+    if p.get("performed") is None:
+        return "—"
+    parts = ["執行"]
+    if p.get("drained_ml") is not None:
+        parts.append(f"引流量 {p['drained_ml']} mL")
+    if p.get("time"):
+        parts.append(f"時間 {p['time']}")
+    return ";".join(parts)
+
+
+def _fmt_cv_surgery_standby(s):
+    if not s:
+        return "—"
+    if s.get("activated") is False:
+        return "未啟動"
+    if s.get("activated") is None:
+        return "—"
+    parts = ["啟動"]
+    if s.get("notify_time"):
+        parts.append(f"通知 {s['notify_time']}")
+    if s.get("arrival_time"):
+        parts.append(f"到場 {s['arrival_time']}")
+    return ";".join(parts)
+
+
+def _fmt_mcs(m):
+    if not m:
+        return "—"
+    devs = []
+    if m.get("ecmo"):
+        devs.append("ECMO")
+    if m.get("iabp"):
+        devs.append("IABP")
+    if not devs:
+        return "未使用"
+    txt = "+".join(devs)
+    if m.get("device_start_time"):
+        txt += f" (啟動時間 {m['device_start_time']})"
+    return txt
+
+
+def _fmt_subtype(s):
+    cover = "☑" if s == "cover_stent" else "☐"
+    elective = "☑" if s == "elective_with_complication" else "☐"
+    return f"{cover} Cover stent  {elective} Elective PCI with complication"
+
+
+def _fmt_dapt(d):
+    if not d:
+        return "—"
+    drugs = d.get("drugs") or "—"
+    dur = d.get("duration") or "—"
+    return f"{drugs}\n期程:{dur}"
+
+
+def _fmt_status(s):
+    return {
+        "alive_stable": "Alive & stable",
+        "needs_rehab": "需 rehab",
+        "transfer_out": "轉院",
+        "expired": "Expired",
+    }.get(s, s or "—")
+
+
+def scalar_fillers_g2(y):
+    """Return [(label_keyword, value, src)] for Group-2 scalar tables."""
+    cs = y.get("cover_stent_used") or {}
+    pc = y.get("pericardiocentesis") or {}
+    cv = y.get("cv_surgery_standby") or {}
+    mcs = y.get("mcs_devices") or {}
+
+    los = y.get("length_of_stay_days")
+    los_str = f"{los} 天" if los is not None else "—"
+
+    lvef = y.get("final_lvef")
+    lvef_str = f"{lvef} %" if lvef is not None else "—"
+
+    return [
+        ("病歷號 Chart No.", y.get("chart_no", ""), None),
+        ("姓名", y.get("name_code", ""), None),
+        ("PCI 日期", y.get("pci_date", ""), None),
+        ("Operator", y.get("operator", ""), y.get("operator_src")),
+        ("本組分類", _fmt_subtype(y.get("group2_subtype")), y.get("group2_subtype_src")),
+        ("Demographics", y.get("demographics_comorbidities", ""),
+            y.get("demographics_comorbidities_src")),
+        ("Presentation", y.get("presentation", ""), y.get("presentation_src")),
+        ("原計畫 PCI 策略", y.get("original_pci_plan", ""), y.get("original_pci_plan_src")),
+        ("Complication 類別", y.get("complication_category", ""),
+            y.get("complication_category_src")),
+        ("發生機轉", y.get("complication_mechanism", ""),
+            y.get("complication_mechanism_src")),
+        ("是否使用 cover stent", _fmt_cover_stent(cs), y.get("cover_stent_src")),
+        ("是否需 pericardiocentesis", _fmt_pericardiocentesis(pc),
+            y.get("pericardiocentesis_src")),
+        ("是否啟動 CV surgery stand-by", _fmt_cv_surgery_standby(cv),
+            y.get("cv_surgery_standby_src")),
+        ("是否需 ECMO / IABP", _fmt_mcs(mcs), y.get("mcs_devices_src")),
+        ("住院天數", los_str, y.get("length_of_stay_src")),
+        ("出院時 status", _fmt_status(y.get("discharge_status")),
+            y.get("discharge_status_src")),
+        ("Final LVEF", lvef_str, y.get("final_lvef_src")),
+        ("DAPT 計畫", _fmt_dapt(y.get("dapt_plan")), y.get("dapt_plan_src")),
+        ("M&M 結論", y.get("mm_takeaway", ""), y.get("mm_takeaway_src")),
+        ("被點到時這樣開場", y.get("opening_one_liner", ""), None),
+    ]
+
+
+# Group-2 timeline (table with 8 rows: header + 7 events)
+TIMELINE_KEYS = [
+    ("併發症發生", "complication_onset"),
+    ("Bailout 決策", "bailout_decision"),
+    ("Cover stent 部署", "cover_stent_deployment"),
+    ("CV surgery 通知", "cv_surgery_notify"),
+    ("家屬告知", "family_notification"),
+    ("送 ICU / CCU", "icu_ccu_transfer"),
+    ("後續處置", "followup_management"),
+]
+
+
+def fill_timeline_g2(table, timeline):
+    if not timeline:
+        return
+    for row in table.rows:
+        if len(row.cells) < 3:
+            continue
+        event_text = cell_text(row.cells[1])
+        for label, key in TIMELINE_KEYS:
+            if label in event_text:
+                entry = timeline.get(key) or {}
+                t = entry.get("time") or "—"
+                set_cell_text(row.cells[0], t)
+                note = entry.get("note") or ""
+                if note:
+                    set_cell_text(row.cells[1], f"{label}\n{note}")
+                src = entry.get("src") or ""
+                if src:
+                    set_cell_text(row.cells[2], src)
+                break
+
+
+# Group-2 evidence checklist (11 rows)
+CHECKLIST_LABELS_G2 = [
+    ("原 PCI 知情同意書", "original_pci_consent"),
+    ("Cover stent / Bailout 同意書", "cover_stent_or_bailout_consent"),
+    ("併發症當下家屬告知", "family_notification_record"),
+    ("CV Surgery 即時照會", "cv_surgery_realtime_consult"),
+    ("Anesthesia / ICU / CCU", "anesthesia_icu_ccu_consult"),
+    ("家庭會議", "family_meeting_followup"),
+    ("Cath conference", "cath_conference_or_mm"),
+    ("院內不良事件通報", "hospital_incident_report"),
+    ("CDS", "cds_alerts"),
+    ("後續追蹤", "postop_followup"),
+]
+
+
+def fill_checklist_g2(table, checklist):
+    if not checklist:
+        return
+    for row in table.rows:
+        if len(row.cells) < 3:
+            continue
+        item_text = cell_text(row.cells[1])
+        for label_key, yaml_key in CHECKLIST_LABELS_G2:
+            if label_key in item_text:
+                entry = checklist.get(yaml_key) or {}
+                found = entry.get("found")
+                checkbox = "☑" if found is True else ("☒" if found is False else "☐")
+                set_cell_text(row.cells[0], checkbox)
+                loc = entry.get("location") or ""
+                note = entry.get("note") or ""
+                merged = []
+                if loc:
+                    merged.append(f"位置/日期: {loc}")
+                if note:
+                    merged.append(f"備註: {note}")
+                if merged:
+                    set_cell_text(row.cells[2], "\n".join(merged))
+                break
+
+
+def fill_qa_g2(doc, questions):
+    """Group 2 has 4 pre-filled questions; we only fill the answer cell.
+    Match by substring of the existing question text."""
+    if not questions:
+        return
+    for tbl in doc.tables:
+        for row in tbl.rows:
+            if len(row.cells) < 2:
+                continue
+            label = cell_text(row.cells[0]).strip()
+            if not label.startswith("Q:"):
+                continue
+            for q in questions:
+                qtext = (q.get("q") or "").strip()
+                if not qtext:
+                    continue
+                # match by first 6 meaningful chars
+                core = re.sub(r"[Q:?? ]", "", qtext)[:6]
+                if core and core in label.replace("?", "").replace("?", ""):
+                    set_cell_text(row.cells[1], q.get("a", ""))
+                    break
+
+
+def fill_doc_g2(template_path, yaml_data, output_path):
+    """Group 2 render path: drop group 1, fill group 2."""
+    doc = Document(str(template_path))
+    drop_group_one(doc)
+
+    fillers = scalar_fillers_g2(yaml_data)
+    used = set()
+
+    for tbl in doc.tables:
+        for row in tbl.rows:
+            cells = row.cells
+            if len(cells) < 2:
+                continue
+            label = cell_text(cells[0]).strip()
+            if not label:
+                continue
+            for i, (kw, val, src) in enumerate(fillers):
+                if i in used:
+                    continue
+                if kw in label:
+                    set_cell_text(cells[1], str(val) if val is not None else "—",
+                                  source=src)
+                    used.add(i)
+                    break
+
+        if not tbl.rows:
+            continue
+        first = tbl.rows[0].cells
+        # timeline table (header: 時間 / 事件 / 紀錄位置)
+        if len(first) >= 3 and "時間" in cell_text(first[0]) and "事件" in cell_text(first[1]):
+            fill_timeline_g2(tbl, yaml_data.get("timeline") or {})
+        # checklist table
+        if len(first) >= 3 and "項目" in cell_text(first[1]) and len(tbl.rows) >= 8:
+            fill_checklist_g2(tbl, yaml_data.get("evidence_checklist") or {})
+
+    fill_qa_g2(doc, yaml_data.get("likely_questions") or [])
+
+    doc.save(str(output_path))
+    return output_path
+
+
 def format_euroscore_block(es):
     """Build a multi-line text block summarizing the EuroSCORE II result."""
     if not es or not es.get("computed"):
@@ -387,6 +670,7 @@ def main():
     gemini_out = GEMINI_WORKSPACE / "out"
     for case in load_cases():
         chart = case["chart"]
+        group = (case.get("group") or "1").strip()
         yaml_path = gemini_out / f"case_{chart}_filled.yaml"
         if not yaml_path.exists():
             print(f"  {chart}: skip ({yaml_path.name} not found)")
@@ -395,8 +679,11 @@ def main():
         name_code = (y.get("name_code") or chart).replace("/", "")
         out_path = OUT_DIR / f"{chart}_{name_code}_filled.docx"
         try:
-            fill_doc(TEMPLATE, y, out_path)
-            print(f"  rendered -> {out_path}")
+            if group == "2":
+                fill_doc_g2(TEMPLATE, y, out_path)
+            else:
+                fill_doc(TEMPLATE, y, out_path)
+            print(f"  rendered (group {group}) -> {out_path}")
         except PermissionError:
             print(f"  {chart}: SKIP — {out_path.name} is open (close it in Word and re-run)")
 

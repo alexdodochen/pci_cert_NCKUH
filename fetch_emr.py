@@ -193,6 +193,10 @@ INTEREST_PATTERNS = [
     ("eform", re.compile(r"^心臟功能")),  # echo / functional
     ("eform", re.compile(r"^物理治療")),  # PT records
     ("eform", re.compile(r"^住院同意書")),  # admission consent
+    # Group 2 (complication) needs HH:MM timestamps for the timeline:
+    ("護理紀錄", re.compile(r"^護理紀錄")),
+    ("病程紀錄", re.compile(r"^病程紀錄")),
+    ("家庭會議", re.compile(r"家庭會議")),
 ]
 
 

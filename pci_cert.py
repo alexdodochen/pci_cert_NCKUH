@@ -28,8 +28,10 @@ if sys.stdout.encoding != "utf-8":
 
 from config import (
     ADMISSION_MAP, EMR_RAW_DIR, FILLED_DOCX_DIR, GEMINI_WORKSPACE,
-    TEMPLATE_SCHEMA, load_cases,
+    TEMPLATE_SCHEMA, load_cases, ROOT,
 )
+
+TEMPLATE_SCHEMA_G2 = ROOT / "template_schema_group2.md"
 
 
 def step(label):
@@ -65,10 +67,13 @@ def main():
     inputs_dir = GEMINI_WORKSPACE / "inputs"
     inputs_dir.mkdir(exist_ok=True)
     shutil.copy(TEMPLATE_SCHEMA, inputs_dir / "template_schema.md")
+    if TEMPLATE_SCHEMA_G2.exists():
+        shutil.copy(TEMPLATE_SCHEMA_G2, inputs_dir / "template_schema_group2.md")
     amap = json.loads(ADMISSION_MAP.read_text(encoding="utf-8"))
     cmds = []
     for case in cases:
         chart = case["chart"]
+        group = (case.get("group") or "1").strip()
         info = amap.get(chart) or {}
         if not info.get("matched"):
             print(f"  {chart}: skip (no admission match)")
@@ -81,13 +86,27 @@ def main():
         raw_dst = inputs_dir / f"case_{chart}_raw.txt"
         shutil.copy(raw_src, raw_dst)
 
+        if group == "2":
+            schema_file = "inputs/template_schema_group2.md"
+            extra = (
+                "This is a Group-2 case (Cover Stent + Elective PCI with Complication). "
+                "★ Timeline timestamps (HH:MM) are critical — pull them from "
+                "[護理紀錄] / [病程紀錄] / [心導管室檢查後交班單(II)]. "
+                "If a timestamp is missing in EMR, set time to null and src to "
+                "'未在 EMR 找到', then list it in _caveats. "
+            )
+        else:
+            schema_file = "inputs/template_schema.md"
+            extra = (
+                "The cath OP report (心臟血管攝影檢查報告) is in the [檢驗報告] section. "
+            )
+
         prompt = (
-            f"Read inputs/template_schema.md and inputs/case_{chart}_raw.txt. "
-            f"Fill the YAML for chart {chart} (PCI {info['pci_date']}); "
-            f"save to out/case_{chart}_filled.yaml. The cath OP report "
-            f"(心臟血管攝影檢查報告) is in the [檢驗報告] section. Be honest about "
-            f"unknowns — leave fields null rather than invent. Final stdout line "
-            f"must be 'DONE: out/case_{chart}_filled.yaml'."
+            f"Read {schema_file} and inputs/case_{chart}_raw.txt. "
+            f"Fill the YAML for chart {chart} (PCI {info['pci_date']}, group {group}); "
+            f"save to out/case_{chart}_filled.yaml. {extra}"
+            f"Be honest about unknowns — leave fields null rather than invent. "
+            f"Final stdout line must be 'DONE: out/case_{chart}_filled.yaml'."
         )
         cmd = (
             f'cd /c/Users/dr/Claude-Gemini-Dialogue && '

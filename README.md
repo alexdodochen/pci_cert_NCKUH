@@ -35,8 +35,11 @@ Or one-shot: `py pci_cert.py` (prints the per-case delegate commands; you run ea
 | `fetch_emr.py` | Per matched admission: AD/DC/PL/diagnosis/order/consults/exam/eform PDFs |
 | `render_docx.py` | python-docx fills the template's first-group tables; drops the second group |
 | `pci_cert.py` | Orchestrator |
-| `template_schema.md` | YAML field definitions handed to Gemini |
-| `PCI_認證病歷小抄_template.docx` | The empty cheatsheet template |
+| `template_schema.md` | YAML field definitions handed to Gemini (Group 1 — Stent > 5) |
+| `template_schema_group2.md` | YAML field definitions for Group 2 (Cover Stent + Elective PCI with Complication) — timeline, cover-stent, pericardiocentesis, CV-surgery stand-by, MCS devices |
+| `compute_euroscore.py` | Reads each YAML's EuroSCORE II inputs, runs Nashef 2012 formula via cloned `euroscore_NCKUH/euroscore_ii.py`, writes back score + risk band + Cockcroft-Gault CC + main contributors |
+| `fetch_existing_euroscore.py` | Probes any pre-existing in-EMR EuroSCORE form (`eform_ncku TemplateCode=EMR-3-04-008`) for cross-validation |
+| `PCI_認證病歷小抄_template.docx` | The empty cheatsheet template (contains both 第一組 and 第二組) |
 
 ## Prerequisites
 
