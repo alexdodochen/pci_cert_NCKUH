@@ -677,7 +677,8 @@ def main():
             continue
         y = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
         name_code = (y.get("name_code") or chart).replace("/", "")
-        out_path = OUT_DIR / f"{chart}_{name_code}_filled.docx"
+        suffix = "_filled_complication" if group == "2" else "_filled"
+        out_path = OUT_DIR / f"{chart}_{name_code}{suffix}.docx"
         try:
             if group == "2":
                 fill_doc_g2(TEMPLATE, y, out_path)

@@ -99,5 +99,6 @@ For complication cases set `group=2` in `cases.csv`. The pipeline then:
 - routes Gemini delegation to `template_schema_group2.md` (timeline 8 events with HH:MM, complication checklist 11 rows, M&M takeaway)
 - adds `護理紀錄` / `病程紀錄` / `家庭會議` to `fetch_emr.py` interest patterns (HH:MM timestamps for the timeline)
 - renders via `fill_doc_g2()` which drops 第一組 from the template and fills 第二組 tables
+- writes the output as `<chart>_<姓O名>_filled_complication.docx` (Group 1 stays on `_filled.docx`) so Group 1 / Group 2 cheatsheets are easy to tell apart in `_filled_docx/`
 
 See the sibling skill repo above for the conceptual write-up.
