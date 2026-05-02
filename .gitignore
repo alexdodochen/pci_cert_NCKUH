@@ -1,0 +1,16 @@
+# PHI — never commit
+cases.csv
+_admission_map.json
+_emr_raw/
+_emr_pdfs/
+_tree_raw/
+_filled_docx/
+
+# Build / OS / IDE
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
