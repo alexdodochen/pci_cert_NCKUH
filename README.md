@@ -40,6 +40,12 @@ Or one-shot: `py pci_cert.py` (prints the per-case delegate commands; you run ea
 | `compute_euroscore.py` | Reads each YAML's EuroSCORE II inputs, runs Nashef 2012 formula via cloned `euroscore_NCKUH/euroscore_ii.py`, writes back score + risk band + Cockcroft-Gault CC + main contributors |
 | `fetch_existing_euroscore.py` | Probes any pre-existing in-EMR EuroSCORE form (`eform_ncku TemplateCode=EMR-3-04-008`) for cross-validation |
 | `PCI_認證病歷小抄_template.docx` | The empty cheatsheet template (contains both 第一組 and 第二組) |
+| `fetch_exam_reports.py` | Fast path for **cath OP report** — fetches every `viewer.aspx?type=exam` link in the chart's tree (the cath note + same-day labs are inline in this viewer). Confirms cath site by keyword grep |
+| `fetch_eforms.py` | Sweeps `NISlist2.aspx?Gtype=EForms&GSubtype=1..10` to capture every eform PDF: cath room before/after handover (EMR-3-CR-001/002), cath safety check (EMR-3-04-001), hospice consult intake/service/home-care (EMR-3-07-004..016), 善終備忘錄 (EMR-3-N0-091), etc. Dedups by (medicalsn, TemplateCode, Sequence) |
+| `_probe_camera.py` | (PHI-bound, gitignored) Sweeps `viewer.aspx?type=camera&kind=1..99` to discover all scanned-form kinds for a chart. Verified mapping: 027=轉床轉科表 / 031=出院準備 / 032=同意書 / 033=DNR / 058=家庭會議 |
+| `fetch_cath_report.py` | Fallback: Selenium-driven cath report extraction via the EMR popup. Use only if `fetch_exam_reports.py` fails (e.g. structure changes). User logs in manually — credentials are NEVER read or stored |
+| `render_case_summary_docx.py` | Converts a `_case_summary_<chart>.md` (free-form review brief, gitignored) into a clean `.docx` with tables, bullets, and bold formatting for committee review |
+| `organize_review_attachments.py` | Copies every fetched scan/PDF into a single `_review_attachments_<chart>/` folder with descriptive Chinese filenames (家庭會議紀錄、DNR同意書、心導管室前/後交班單…) for one-click review |
 
 ## Prerequisites
 

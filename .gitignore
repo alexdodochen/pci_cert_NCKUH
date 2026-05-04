@@ -5,6 +5,9 @@ _emr_raw/
 _emr_pdfs/
 _tree_raw/
 _filled_docx/
+_case_summary_*.md
+_review_attachments_*/
+_probe_*.py
 
 # Build / OS / IDE
 __pycache__/
