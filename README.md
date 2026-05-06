@@ -46,6 +46,7 @@ Or one-shot: `py pci_cert.py` (prints the per-case delegate commands; you run ea
 | `fetch_cath_report.py` | Fallback: Selenium-driven cath report extraction via the EMR popup. Use only if `fetch_exam_reports.py` fails (e.g. structure changes). User logs in manually — credentials are NEVER read or stored |
 | `render_case_summary_docx.py` | Converts a `_case_summary_<chart>.md` (free-form review brief, gitignored) into a clean `.docx` with tables, bullets, and bold formatting for committee review |
 | `organize_review_attachments.py` | Copies every fetched scan/PDF into a single `_review_attachments_<chart>/` folder with descriptive Chinese filenames (家庭會議紀錄、DNR同意書、心導管室前/後交班單…) for one-click review |
+| `survey_max_stent.py` | Survey one chart's CV admissions since 2020, parse each 心導管室檢查後交班單(II) PDF for stent count, print summary — used when the user gives a chart but no PCI date and we need to pick the max-stent session for cert filing. Caveat: pre-2022 cath form PDFs use a Caesar-shifted CID font that pdftotext can't decode; falls back to discharge note text |
 
 ## Prerequisites
 
